@@ -14,6 +14,7 @@ import {
   executeForDependents,
   getDependencies,
   ResourceDependencyError,
+  __resetExecutionCounter,
 } from './index';
 
 describe('dependent resources', () => {
@@ -66,13 +67,27 @@ describe('dependent resources', () => {
     return api;
   };
 
-  describe('executeTuples', () => {
-    it('should throw where there is existing executing state', () => {
-      const mockApi = createApi({ executing: [] });
+  /** Extract the tuples from the first (and typically only) execution context. */
+  const getExecutingTuples = (setStateCall: any) => {
+    const { executing } = setStateCall;
+    if (!executing) return null;
+    const values = Object.values(executing);
 
-      expect(() => executeTuples([resourceA, resourceB], [])(mockApi)).toThrow(
-        'execution is already in progress'
-      );
+    return values[values.length - 1];
+  };
+
+  beforeEach(() => {
+    __resetExecutionCounter();
+  });
+
+  describe('executeTuples', () => {
+    it('should allow concurrent executions without throwing', () => {
+      const mockApi = createApi({ executing: { existing: [] } });
+      const action = jest.fn().mockReturnValue(1);
+
+      expect(() =>
+        executeTuples([resourceA, resourceB], [[resourceA, action]])(mockApi)
+      ).not.toThrow();
     });
 
     it('should separately dispatch independent resources without creating executing state', () => {
@@ -171,13 +186,12 @@ describe('dependent resources', () => {
       ).toEqual([1]);
 
       expect(mockApi.setState).toHaveBeenCalledTimes(2);
-      expect(mockApi.setState).toHaveBeenNthCalledWith(1, {
-        executing: [
-          [resourceX, null],
-          [resourceY, action],
-          [resourceZ, null],
-        ],
-      });
+      const firstCall = (mockApi.setState as jest.Mock).mock.calls[0][0];
+      expect(getExecutingTuples(firstCall)).toEqual([
+        [resourceX, null],
+        [resourceY, action],
+        [resourceZ, null],
+      ]);
       expect(mockApi.dispatch).toHaveBeenCalledTimes(1);
       expect(action).toHaveBeenCalledTimes(1);
       expect(mockApi.setState).toHaveBeenNthCalledWith(2, { executing: null });
@@ -195,13 +209,12 @@ describe('dependent resources', () => {
       ).toEqual([1]);
 
       expect(mockApi.setState).toHaveBeenCalledTimes(2);
-      expect(mockApi.setState).toHaveBeenNthCalledWith(1, {
-        executing: [
-          [resourceX, action],
-          [resourceY, null],
-          [resourceZ, null],
-        ],
-      });
+      const firstCall = (mockApi.setState as jest.Mock).mock.calls[0][0];
+      expect(getExecutingTuples(firstCall)).toEqual([
+        [resourceX, action],
+        [resourceY, null],
+        [resourceZ, null],
+      ]);
       expect(mockApi.dispatch).toHaveBeenCalledTimes(1);
       expect(action).toHaveBeenCalledTimes(1);
       expect(mockApi.setState).toHaveBeenNthCalledWith(2, { executing: null });
@@ -227,13 +240,12 @@ describe('dependent resources', () => {
       ).toEqual([1]);
 
       expect(mockApi.setState).toHaveBeenCalledTimes(2);
-      expect(mockApi.setState).toHaveBeenNthCalledWith(1, {
-        executing: [
-          [resourceX, action],
-          [resourceY, null],
-          [resourceZ, null],
-        ],
-      });
+      const firstCall = (mockApi.setState as jest.Mock).mock.calls[0][0];
+      expect(getExecutingTuples(firstCall)).toEqual([
+        [resourceX, action],
+        [resourceY, null],
+        [resourceZ, null],
+      ]);
       expect(mockApi.dispatch).toHaveBeenCalledTimes(1);
       expect(action).toHaveBeenCalledTimes(1);
       expect(mockApi.setState).toHaveBeenNthCalledWith(2, { executing: null });
@@ -243,12 +255,17 @@ describe('dependent resources', () => {
       const mockApi = createApi({ executing: null });
       const action2 = jest.fn().mockReturnValue(2);
       const action1 = jest.fn(() => {
+        // simulate executeForDependents modifying the current context
+        const contexts = (mockApi.getState() as State).executing!;
+        const id = Object.keys(contexts)[0];
         mockApi.setState({
-          executing: [
-            [resourceX, action1],
-            [resourceY, action2],
-            [resourceZ, action2],
-          ],
+          executing: {
+            [id]: [
+              [resourceX, action1],
+              [resourceY, action2],
+              [resourceZ, action2],
+            ],
+          },
         });
 
         return 1;
@@ -270,20 +287,18 @@ describe('dependent resources', () => {
       ).toEqual([1]);
 
       expect(mockApi.setState).toHaveBeenCalledTimes(3);
-      expect(mockApi.setState).toHaveBeenNthCalledWith(1, {
-        executing: [
-          [resourceX, action1],
-          [resourceY, null],
-          [resourceZ, null],
-        ],
-      });
-      expect(mockApi.setState).toHaveBeenNthCalledWith(2, {
-        executing: [
-          [resourceX, action1],
-          [resourceY, action2],
-          [resourceZ, action2],
-        ],
-      });
+      const firstCall = (mockApi.setState as jest.Mock).mock.calls[0][0];
+      expect(getExecutingTuples(firstCall)).toEqual([
+        [resourceX, action1],
+        [resourceY, null],
+        [resourceZ, null],
+      ]);
+      const secondCall = (mockApi.setState as jest.Mock).mock.calls[1][0];
+      expect(getExecutingTuples(secondCall)).toEqual([
+        [resourceX, action1],
+        [resourceY, action2],
+        [resourceZ, action2],
+      ]);
       expect(mockApi.dispatch).toHaveBeenCalledTimes(3);
       expect(action1).toHaveBeenCalledTimes(1);
       expect(action2).toHaveBeenCalledTimes(2);
@@ -294,11 +309,16 @@ describe('dependent resources', () => {
       const mockApi = createApi({ executing: null });
       const action2 = jest.fn().mockReturnValue(2);
       const action1 = jest.fn(() => {
+        // simulate an inconsistent mutation: resource order changed
+        const contexts = (mockApi.getState() as State).executing!;
+        const id = Object.keys(contexts)[0];
         mockApi.setState({
-          executing: [
-            [resourceX, action1],
-            [resourceZ, action2],
-          ],
+          executing: {
+            [id]: [
+              [resourceX, action1],
+              [resourceZ, action2],
+            ],
+          },
         });
 
         return 1;
@@ -312,18 +332,16 @@ describe('dependent resources', () => {
       ).toThrow('execution reached an inconsistent state');
 
       expect(mockApi.setState).toHaveBeenCalledTimes(3);
-      expect(mockApi.setState).toHaveBeenNthCalledWith(1, {
-        executing: [
-          [resourceX, action1],
-          [resourceY, null],
-        ],
-      });
-      expect(mockApi.setState).toHaveBeenNthCalledWith(2, {
-        executing: [
-          [resourceX, action1],
-          [resourceZ, action2],
-        ],
-      });
+      const firstCall = (mockApi.setState as jest.Mock).mock.calls[0][0];
+      expect(getExecutingTuples(firstCall)).toEqual([
+        [resourceX, action1],
+        [resourceY, null],
+      ]);
+      const secondCall = (mockApi.setState as jest.Mock).mock.calls[1][0];
+      expect(getExecutingTuples(secondCall)).toEqual([
+        [resourceX, action1],
+        [resourceZ, action2],
+      ]);
       expect(mockApi.dispatch).toHaveBeenCalledTimes(1);
       expect(action1).toHaveBeenCalledTimes(1);
       expect(action2).not.toHaveBeenCalled();
@@ -351,6 +369,44 @@ describe('dependent resources', () => {
         )(mockApi)
       ).toEqual([3, 1, 4, 2]);
     });
+
+    it('should throw ResourceDependencyError for circular dependencies', () => {
+      const resourceP = toResource('p', ['q']);
+      const resourceQ = toResource('q', ['p']);
+
+      const mockApi = createApi({ executing: null });
+      const action = jest.fn().mockReturnValue(1);
+
+      expect(() =>
+        executeTuples([resourceP, resourceQ], [[resourceP, action]])(mockApi)
+      ).toThrow(ResourceDependencyError);
+    });
+
+    it('should isolate concurrent executions with independent resource sets', () => {
+      const mockApi = createApi({ executing: null });
+      const action1 = jest.fn().mockReturnValue(1);
+      const action2 = jest.fn().mockReturnValue(2);
+
+      // First execution starts
+      const result1 = executeTuples(
+        [resourceM, resourceN],
+        [[resourceN, action1]]
+      )(mockApi);
+
+      expect(result1).toEqual([1]);
+
+      // Second execution starts (simulating overlapping call)
+      const result2 = executeTuples(
+        [resourceX, resourceY, resourceZ],
+        [[resourceY, action2]]
+      )(mockApi);
+
+      expect(result2).toEqual([2]);
+
+      // Both should complete without throwing
+      expect(action1).toHaveBeenCalledTimes(1);
+      expect(action2).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('executeForDependents', () => {
@@ -367,10 +423,12 @@ describe('dependent resources', () => {
 
     it('should do nothing where given resource is not executing', () => {
       const mockApi = createApi({
-        executing: [
-          [resourceY, null],
-          [resourceZ, null],
-        ],
+        executing: {
+          ctx: [
+            [resourceY, null],
+            [resourceZ, null],
+          ],
+        },
       });
       const actionCreator = jest.fn().mockReturnValue(1);
 
@@ -383,11 +441,13 @@ describe('dependent resources', () => {
 
     it('should revise action for resources in executing state dependent on the given resource', () => {
       const mockApi = createApi({
-        executing: [
-          [resourceX, null],
-          [resourceY, null],
-          [resourceZ, null],
-        ],
+        executing: {
+          ctx: [
+            [resourceX, null],
+            [resourceY, null],
+            [resourceZ, null],
+          ],
+        },
       });
       const actionCreator = jest
         .fn()
@@ -398,11 +458,13 @@ describe('dependent resources', () => {
 
       expect(mockApi.getState).toHaveBeenCalled();
       expect(mockApi.setState).toBeCalledWith({
-        executing: [
-          [resourceX, null],
-          [resourceY, 1],
-          [resourceZ, 2],
-        ],
+        executing: {
+          ctx: [
+            [resourceX, null],
+            [resourceY, 1],
+            [resourceZ, 2],
+          ],
+        },
       });
       expect(actionCreator).toHaveBeenCalledTimes(2);
       expect(actionCreator).toHaveBeenNthCalledWith(1, resourceY);
@@ -411,10 +473,12 @@ describe('dependent resources', () => {
 
     it('should not revise action for itself where given resource is a self dependent', () => {
       const mockApi = createApi({
-        executing: [
-          [resourceX, null],
-          [resourceY, null],
-        ],
+        executing: {
+          ctx: [
+            [resourceX, null],
+            [resourceY, null],
+          ],
+        },
       });
       const actionCreator = jest.fn().mockReturnValue(1);
 
@@ -422,21 +486,25 @@ describe('dependent resources', () => {
 
       expect(mockApi.getState).toHaveBeenCalled();
       expect(mockApi.setState).toBeCalledWith({
-        executing: [
-          [resourceX, null],
-          [resourceY, null],
-        ],
+        executing: {
+          ctx: [
+            [resourceX, null],
+            [resourceY, null],
+          ],
+        },
       });
       expect(actionCreator).not.toHaveBeenCalled();
     });
 
     it('should not revise action for resources preceding the given resource in executing state', () => {
       const mockApi = createApi({
-        executing: [
-          [resourceZ, null],
-          [resourceX, null],
-          [resourceY, null],
-        ],
+        executing: {
+          ctx: [
+            [resourceZ, null],
+            [resourceX, null],
+            [resourceY, null],
+          ],
+        },
       });
       const actionCreator = jest.fn().mockReturnValue(1);
 
@@ -444,11 +512,13 @@ describe('dependent resources', () => {
 
       expect(mockApi.getState).toHaveBeenCalled();
       expect(mockApi.setState).toBeCalledWith({
-        executing: [
-          [resourceZ, null],
-          [resourceX, null],
-          [resourceY, 1],
-        ],
+        executing: {
+          ctx: [
+            [resourceZ, null],
+            [resourceX, null],
+            [resourceY, 1],
+          ],
+        },
       });
       expect(actionCreator).toHaveBeenCalledTimes(1);
       expect(actionCreator).toBeCalledWith(resourceY);
@@ -460,7 +530,7 @@ describe('dependent resources', () => {
     const slice2 = { data: 2 } as RouteResourceResponse<number>;
 
     it('should return empty object where given resource has no dependencies', () => {
-      const mockApi = createApi({ executing: [] });
+      const mockApi = createApi({ executing: {} });
 
       expect(
         getDependencies(
@@ -497,10 +567,12 @@ describe('dependent resources', () => {
 
     it('should throw ResourceDependencyError where given dependent resource is not in executing state', () => {
       const mockApi = createApi({
-        executing: [
-          [resourceX, null],
-          [resourceY, null],
-        ],
+        executing: {
+          ctx: [
+            [resourceX, null],
+            [resourceY, null],
+          ],
+        },
       });
 
       expect(() =>
@@ -520,10 +592,12 @@ describe('dependent resources', () => {
           x: { key: slice1 },
           y: { key: slice2 },
         },
-        executing: [
-          [resourceX, null],
-          [resourceY, null],
-        ],
+        executing: {
+          ctx: [
+            [resourceX, null],
+            [resourceY, null],
+          ],
+        },
       });
 
       expect(() =>
@@ -572,11 +646,13 @@ describe('dependent resources', () => {
           x: { key: slice1 },
           y: { key: slice2 },
         },
-        executing: [
-          [resourceX, null],
-          [resourceY, null],
-          [resourceZ, null],
-        ],
+        executing: {
+          ctx: [
+            [resourceX, null],
+            [resourceY, null],
+            [resourceZ, null],
+          ],
+        },
       });
 
       expect(
@@ -596,10 +672,12 @@ describe('dependent resources', () => {
           x: { key: slice1 },
           y: { key: slice2 },
         },
-        executing: [
-          [resourceX, null],
-          [resourceY, null],
-        ],
+        executing: {
+          ctx: [
+            [resourceX, null],
+            [resourceY, null],
+          ],
+        },
       });
 
       expect(
@@ -619,10 +697,12 @@ describe('dependent resources', () => {
           x: { key: slice1 },
           y: { key: slice2 },
         },
-        executing: [
-          [resourceY, null],
-          [resourceX, null],
-        ],
+        executing: {
+          ctx: [
+            [resourceY, null],
+            [resourceX, null],
+          ],
+        },
       });
 
       expect(() =>

@@ -38,16 +38,111 @@ export class ResourceDependencyError extends Error {
   }
 }
 
+// per-execution-cycle isolation: each executeTuples call gets a unique ID
+let nextExecutionId = 0;
+// tracks the ID of the execution currently iterating its tuples synchronously
+let activeExecutionId: string | null = null;
+
+/** Reset internal counters (for testing only). */
+export const __resetExecutionCounter = (): void => {
+  nextExecutionId = 0;
+  activeExecutionId = null;
+};
+
+/**
+ * Detect circular dependencies in the route resource graph.
+ * Throws ResourceDependencyError on the first cycle found.
+ */
+function detectCycles(routeResources: RouteResource[]): void {
+  const typeSet = new Set(routeResources.map(r => r.type));
+  const graph = new Map<ResourceType, ResourceType[]>();
+
+  for (const { type, depends } of routeResources) {
+    if (depends?.length) {
+      const validDeps = depends.filter(d => d !== type && typeSet.has(d));
+      if (validDeps.length) {
+        graph.set(type, validDeps);
+      }
+    }
+  }
+
+  const visited = new Set<ResourceType>();
+  const visiting = new Set<ResourceType>();
+
+  function dfs(node: ResourceType, path: ResourceType[]): void {
+    if (visiting.has(node)) {
+      const cycleStart = path.indexOf(node);
+      const cycle = [...path.slice(cycleStart), node];
+      throw new ResourceDependencyError(
+        `Circular dependency detected: ${cycle.join(' \u2192 ')}`
+      );
+    }
+    if (visited.has(node)) return;
+
+    visiting.add(node);
+    path.push(node);
+
+    for (const dep of graph.get(node) || []) {
+      dfs(dep, path);
+    }
+
+    path.pop();
+    visiting.delete(node);
+    visited.add(node);
+  }
+
+  for (const node of graph.keys()) {
+    if (!visited.has(node)) {
+      dfs(node, []);
+    }
+  }
+}
+
+/**
+ * Find the execution context that contains the given resource.
+ * Prefers the context identified by `preferredId` (the currently iterating
+ * execution), falling back to a full search across all active contexts.
+ */
+function findExecutionContext(
+  contexts: Record<string, ExecutionMaybeTuple[]>,
+  resource: MatchableType,
+  preferredId: string | null
+): [string, ExecutionMaybeTuple[]] | undefined {
+  if (preferredId && contexts[preferredId]) {
+    const tuples = contexts[preferredId];
+    if (tuples.some(matchType(resource))) {
+      return [preferredId, tuples];
+    }
+  }
+
+  for (const [id, tuples] of Object.entries(contexts)) {
+    if (tuples.some(matchType(resource))) {
+      return [id, tuples];
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Remove an execution context by ID and return the cleaned state.
+ * Returns null when no contexts remain.
+ */
+function removeExecutionContext(
+  contexts: Record<string, ExecutionMaybeTuple[]>,
+  executionId: string
+): Record<string, ExecutionMaybeTuple[]> | null {
+  const { [executionId]: _, ...remaining } = contexts;
+
+  return Object.keys(remaining).length > 0 ? remaining : null;
+}
+
 export const executeTuples =
   <R>(
     routeResources: RouteResource[] | null | undefined,
     tuples: ExecutionTuple[]
   ): ResourceAction<R[]> =>
   ({ getState, setState, dispatch }) => {
-    if (getState().executing) {
-      throw new Error('execution is already in progress');
-    }
-
     // check if there are resources and if so if there are any resources with dependencies
     const hasDependentResources =
       routeResources?.some(({ depends }) => depends?.length) ?? false;
@@ -64,10 +159,12 @@ export const executeTuples =
       return tuples.map(([, action]) => dispatch(action));
     }
 
+    // validate the dependency graph for cycles
+    detectCycles(routeResources!);
+
     // accumulate the dependency types for all executing resources
     // find downstream resources that may also execute and include their dependencies too
     // include the resource type as well in the list
-    // we don't validate that these are legal dependencies
     const [dependentTypes] = routeResources!
       .reduce<[ResourceType[], string[]]>(
         (acc, { type, depends }) => {
@@ -96,7 +193,6 @@ export const executeTuples =
     }
 
     // additionally find all direct dependencies of these executing or possibly executing resources
-    // we don't validate that these are legal dependencies
     const dependentAndDependencyTypes = routeResources!
       .filter(({ type }) => dependentTypes.includes(type))
       .reduce(
@@ -118,31 +214,53 @@ export const executeTuples =
           ([resource, null] as ExecutionMaybeTuple)
       );
 
-    setState({ executing: executingTuples });
-
-    // dispatch sequentially during which executeForDependents() can cause tuples to change
-    const executedResults = executingTuples.map(
-      ([{ type: expectedType }], i) => {
-        const latestTuple = getState().executing?.[i];
-        const [{ type: latestType }, maybeAction] = latestTuple ?? [{}];
-
-        if (latestType !== expectedType) {
-          setState({ executing: null });
-          throw new Error('execution reached an inconsistent state');
-        }
-
-        return maybeAction ? dispatch(maybeAction) : undefined;
-      }
-    );
-
-    setState({ executing: null });
-
-    // pick existing execution result or dispatch any remaining independent actions
-    return tuples.map(([resource, action]) => {
-      const index = executingTuples.findIndex(matchType(resource));
-
-      return index < 0 ? dispatch(action) : executedResults[index];
+    // allocate a unique execution context so overlapping calls do not collide
+    const executionId = String(++nextExecutionId);
+    const prevContexts = getState().executing || {};
+    setState({
+      executing: { ...prevContexts, [executionId]: executingTuples },
     });
+
+    const prevActiveId = activeExecutionId;
+    activeExecutionId = executionId;
+
+    try {
+      // dispatch sequentially during which executeForDependents() can cause tuples to change
+      const executedResults = executingTuples.map(
+        ([{ type: expectedType }], i) => {
+          const latestTuple = getState().executing?.[executionId]?.[i];
+          const [{ type: latestType }, maybeAction] = latestTuple ?? [{}];
+
+          if (latestType !== expectedType) {
+            setState({
+              executing: removeExecutionContext(
+                getState().executing || {},
+                executionId
+              ),
+            });
+            throw new Error('execution reached an inconsistent state');
+          }
+
+          return maybeAction ? dispatch(maybeAction) : undefined;
+        }
+      );
+
+      setState({
+        executing: removeExecutionContext(
+          getState().executing || {},
+          executionId
+        ),
+      });
+
+      // pick existing execution result or dispatch any remaining independent actions
+      return tuples.map(([resource, action]) => {
+        const index = executingTuples.findIndex(matchType(resource));
+
+        return index < 0 ? dispatch(action) : executedResults[index];
+      });
+    } finally {
+      activeExecutionId = prevActiveId;
+    }
   };
 
 export const actionWithDependencies =
@@ -170,16 +288,25 @@ export const executeForDependents =
     actionCreator: (r: RouteResource) => ResourceAction<R>
   ): ResourceAction<void> =>
   ({ getState, setState }) => {
-    const { executing: tuples } = getState();
+    const { executing: contexts } = getState();
+    if (!contexts) {
+      return;
+    }
 
-    // find the given resource in the currently executing tuples
-    const indexForResource = tuples?.findIndex(matchType(resource)) ?? -1;
+    // find the execution context that owns this resource
+    const found = findExecutionContext(contexts, resource, activeExecutionId);
+    if (!found) {
+      return;
+    }
+
+    const [contextId, tuples] = found;
+    const indexForResource = tuples.findIndex(matchType(resource));
     if (indexForResource < 0) {
       return;
     }
 
     // find dependent resources following given resource and revise their action
-    const executing = tuples!.map((tuple, i): ExecutionMaybeTuple => {
+    const updatedTuples = tuples.map((tuple, i): ExecutionMaybeTuple => {
       const [tupleResource] = tuple;
 
       return i > indexForResource &&
@@ -188,7 +315,7 @@ export const executeForDependents =
         : tuple;
     });
 
-    setState({ executing });
+    setState({ executing: { ...contexts, [contextId]: updatedTuples } });
   };
 
 export const getDependencies =
@@ -205,7 +332,16 @@ export const getDependencies =
       return {};
     }
 
-    const { executing: tuples, context: resourceStoreContext } = getState();
+    const { executing: contexts, context: resourceStoreContext } = getState();
+
+    // find the execution context that contains this resource
+    let tuples: ExecutionMaybeTuple[] | undefined;
+    if (contexts) {
+      const found = findExecutionContext(contexts, resource, activeExecutionId);
+      if (found) {
+        tuples = found[1];
+      }
+    }
 
     // dependent resource cannot be called outside execution state
     // find the given resource type in the currently executing tuples

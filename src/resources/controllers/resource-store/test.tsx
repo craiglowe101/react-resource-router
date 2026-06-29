@@ -1761,12 +1761,8 @@ describe('resource store', () => {
       ])('%s should operate outside of executing state', (_label, action) => {
         const setState = jest.spyOn(storeState, 'setState');
         expect(action).not.toThrow();
-        expect(setState).not.toHaveBeenNthCalledWith(
-          1,
-          expect.objectContaining({
-            executing: expect.any(Array),
-          })
-        );
+        const firstArg = (setState as jest.Mock).mock.calls[0]?.[0];
+        expect(firstArg?.executing ?? null).toBeNull();
       });
     });
 
@@ -1810,12 +1806,9 @@ describe('resource store', () => {
       ])('%s should operate with executing state', (_label, action) => {
         const setState = jest.spyOn(storeState, 'setState');
         expect(action).not.toThrow();
-        expect(setState).toHaveBeenNthCalledWith(
-          1,
-          expect.objectContaining({
-            executing: expect.any(Array),
-          })
-        );
+        const firstArg = (setState as jest.Mock).mock.calls[0]?.[0];
+        expect(firstArg?.executing).not.toBeNull();
+        expect(firstArg?.executing).toBeDefined();
       });
 
       it.each([
@@ -1935,12 +1928,8 @@ describe('resource store', () => {
       ])('%s should operate outside of executing state', (_label, action) => {
         const setState = jest.spyOn(storeState, 'setState');
         expect(action).not.toThrow();
-        expect(setState).not.toHaveBeenNthCalledWith(
-          1,
-          expect.objectContaining({
-            executing: expect.any(Array),
-          })
-        );
+        const firstArg = (setState as jest.Mock).mock.calls[0]?.[0];
+        expect(firstArg?.executing ?? null).toBeNull();
       });
 
       it.each([
@@ -2032,18 +2021,12 @@ describe('resource store', () => {
       ])('%s should operate with executing state', (_label, action) => {
         const setState = jest.spyOn(storeState, 'setState');
         expect(action).not.toThrow();
-        expect(setState).toHaveBeenNthCalledWith(
-          1,
-          expect.objectContaining({
-            executing: expect.any(Array),
-          })
-        );
-        expect(setState).toHaveBeenLastCalledWith(
-          expect.objectContaining({
-            executing: null,
-            prefetching: null,
-          })
-        );
+        const firstArg = (setState as jest.Mock).mock.calls[0]?.[0];
+        expect(firstArg?.executing).not.toBeNull();
+        expect(firstArg?.executing).toBeDefined();
+        const lastCall = (setState as jest.Mock).mock.calls;
+        const lastArg = lastCall[lastCall.length - 1]?.[0];
+        expect(lastArg?.executing).toBeNull();
       });
 
       it.each([

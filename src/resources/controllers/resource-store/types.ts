@@ -17,7 +17,7 @@ export type PrefetchSlice = {
 export type State = {
   data: ResourceStoreData;
   context: ResourceStoreContext;
-  executing: ExecutionMaybeTuple[] | null;
+  executing: Record<string, ExecutionMaybeTuple[]> | null;
   prefetching: Record<string, Record<string, PrefetchSlice | undefined>> | null;
 };
 
