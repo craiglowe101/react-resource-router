@@ -242,6 +242,56 @@ describe('usePathParam()', () => {
     );
   });
 
+  it('should default to push when no updateType is specified', async () => {
+    let ppUpdateFn: (
+      qp: string | undefined,
+      updateType?: 'push' | 'replace'
+    ) => void;
+
+    render(
+      <Router history={history} routes={mockRoutes} plugins={[]}>
+        <MockComponent>
+          {() => {
+            const [, setParam] = usePathParam('projectId');
+            ppUpdateFn = setParam;
+
+            return null;
+          }}
+        </MockComponent>
+      </Router>
+    );
+
+    act(() => ppUpdateFn('abc'));
+
+    expect(historyPushSpy).toHaveBeenCalledTimes(1);
+    expect(historyReplaceSpy).not.toHaveBeenCalled();
+  });
+
+  it('should update path param value after navigation', () => {
+    let ppVal: string | undefined;
+
+    const Component = () => {
+      const [param] = usePathParam('projectId');
+      ppVal = param;
+
+      return null;
+    };
+
+    render(
+      <Router history={history} routes={mockRoutes} plugins={[]}>
+        <Component />
+      </Router>
+    );
+
+    expect(ppVal).toEqual('123');
+
+    act(() => {
+      history.push('/projects/999/board/456?foo=hello&bar=world#hash');
+    });
+
+    expect(ppVal).toEqual('999');
+  });
+
   it('should throw when non-optional params are set undefined', async () => {
     let ppVal: string | undefined;
     let ppUpdateFn: (qp: string | undefined) => void;

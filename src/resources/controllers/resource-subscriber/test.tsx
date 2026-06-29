@@ -116,6 +116,136 @@ describe('<ResourceSubscriber />', () => {
     expect(screen.queryByText('loading')).not.toBeInTheDocument();
   });
 
+  it('should render an error component if the resource has an error', () => {
+    const mockError = new Error('something went wrong');
+    storeState.setState({
+      data: {
+        [type]: {
+          [key]: {
+            data: null,
+            loading: false,
+            error: mockError,
+            promise: null,
+          },
+        },
+      },
+    });
+
+    render(
+      <ResourceSubscriber resource={mockResource}>
+        {({ data, loading, error }) => {
+          if (loading) {
+            return <div data-testid="loading" />;
+          }
+
+          if (error) {
+            return <div data-testid="error">{error.message}</div>;
+          }
+
+          if (data) {
+            return <div data-testid="data" />;
+          }
+
+          return null;
+        }}
+      </ResourceSubscriber>
+    );
+    expect(screen.getByTestId('error')).toBeInTheDocument();
+    expect(screen.getByTestId('error')).toHaveTextContent(
+      'something went wrong'
+    );
+    expect(screen.queryByTestId('loading')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('data')).not.toBeInTheDocument();
+  });
+
+  it('should render data after loading completes', () => {
+    storeState.setState({
+      data: {
+        [type]: {
+          [key]: {
+            data: result,
+            loading: false,
+            error: null,
+            promise: null,
+          },
+        },
+      },
+    });
+
+    render(
+      <ResourceSubscriber resource={mockResource}>
+        {({ data, loading }) => {
+          if (loading) {
+            return <div data-testid="loading" />;
+          }
+
+          return <div data-testid="result">{data as string}</div>;
+        }}
+      </ResourceSubscriber>
+    );
+    expect(screen.getByTestId('result')).toHaveTextContent(result);
+    expect(screen.queryByTestId('loading')).not.toBeInTheDocument();
+  });
+
+  it('should transition from loading to data state', () => {
+    storeState.setState({
+      data: {
+        [type]: {
+          [key]: {
+            data: null,
+            loading: true,
+            error: null,
+            promise: null,
+          },
+        },
+      },
+    });
+
+    const { rerender } = render(
+      <ResourceSubscriber resource={mockResource}>
+        {({ data, loading }) => {
+          if (loading) {
+            return <div data-testid="loading" />;
+          }
+
+          return <div data-testid="data">{data as string}</div>;
+        }}
+      </ResourceSubscriber>
+    );
+
+    expect(screen.getByTestId('loading')).toBeInTheDocument();
+
+    act(() => {
+      storeState.setState({
+        data: {
+          [type]: {
+            [key]: {
+              data: result,
+              loading: false,
+              error: null,
+              promise: null,
+            },
+          },
+        },
+      });
+    });
+
+    rerender(
+      <ResourceSubscriber resource={mockResource}>
+        {({ data, loading }) => {
+          if (loading) {
+            return <div data-testid="loading" />;
+          }
+
+          return <div data-testid="data">{data as string}</div>;
+        }}
+      </ResourceSubscriber>
+    );
+
+    expect(screen.getByTestId('data')).toHaveTextContent(result);
+    expect(screen.queryByTestId('loading')).not.toBeInTheDocument();
+  });
+
   describe('update action', () => {
     it('should update a resource with the provided data', () => {
       const newData = 'my-better-data';

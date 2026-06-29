@@ -539,6 +539,113 @@ describe('RouterStore', () => {
       });
     });
 
+    describe('prefetchRoute()', () => {
+      it('calls routePrefetch plugin hook for an internal relative path', () => {
+        const plugin = {
+          id: 'test-plugin',
+          routePrefetch: jest.fn(),
+        };
+        const plugins = [plugin];
+        const { actions } = renderRouterContainer({ plugins });
+
+        actions.prefetchRoute('/pages/1', null);
+
+        expect(plugin.routePrefetch).toHaveBeenCalledWith({
+          context: expect.objectContaining({
+            route: routes[0],
+            match: expect.any(Object),
+            query: expect.any(Object),
+          }),
+          nextContext: expect.objectContaining({
+            route: routes[1],
+            match: expect.objectContaining({
+              params: { id: '1' },
+              path: '/pages/:id',
+            }),
+          }),
+        });
+      });
+
+      it('calls onPrefetch callback for an internal relative path', () => {
+        const onPrefetch = jest.fn();
+        const { actions } = renderRouterContainer({ onPrefetch });
+
+        actions.prefetchRoute('/pages/1', null);
+
+        expect(onPrefetch).toHaveBeenCalledWith(
+          expect.objectContaining({
+            route: routes[1],
+            match: expect.objectContaining({
+              params: { id: '1' },
+            }),
+          })
+        );
+      });
+
+      it('does not call routePrefetch for an external absolute path that does not match any route', () => {
+        const plugin = {
+          id: 'test-plugin',
+          routePrefetch: jest.fn(),
+        };
+        const onPrefetch = jest.fn();
+        const plugins = [plugin];
+        const { actions } = renderRouterContainer({ plugins, onPrefetch });
+
+        actions.prefetchRoute('http://example.com/other', null);
+
+        expect(plugin.routePrefetch).not.toHaveBeenCalled();
+        expect(onPrefetch).not.toHaveBeenCalled();
+      });
+
+      it('calls routePrefetch when a nextContext is explicitly provided', () => {
+        const plugin = {
+          id: 'test-plugin',
+          routePrefetch: jest.fn(),
+        };
+        const onPrefetch = jest.fn();
+        const plugins = [plugin];
+        const { actions } = renderRouterContainer({ plugins, onPrefetch });
+
+        const explicitContext = {
+          route: routes[1],
+          match: {
+            isExact: true,
+            params: { id: '99' },
+            path: '/pages/:id',
+            query: {},
+            url: '/pages/99',
+          },
+          query: {},
+        };
+
+        actions.prefetchRoute('http://example.com/other', explicitContext);
+
+        expect(plugin.routePrefetch).toHaveBeenCalledWith(
+          expect.objectContaining({
+            nextContext: explicitContext,
+          })
+        );
+        expect(onPrefetch).toHaveBeenCalledWith(explicitContext);
+      });
+
+      it('calls onPrefetch with the best matching route for an internal path', () => {
+        const onPrefetch = jest.fn();
+        const { actions } = renderRouterContainer({ onPrefetch });
+
+        actions.prefetchRoute('/pages', null);
+
+        expect(onPrefetch).toHaveBeenCalledWith(
+          expect.objectContaining({
+            route: routes[0],
+            match: expect.objectContaining({
+              isExact: true,
+              path: '/pages',
+            }),
+          })
+        );
+      });
+    });
+
     describe('createRouterSelector()', () => {
       it('should return selected state', () => {
         const routeNameSelector = jest
@@ -603,6 +710,82 @@ describe('RouterStore', () => {
           'bar'
         );
         expect(screen.getByText('home')).toBeInTheDocument();
+      });
+
+      it('should not re-render when unrelated state changes', () => {
+        let renderCount = 0;
+
+        const useSelectedRoute = createRouterSelector(s => s.route.name);
+
+        const SelectedComponent = () => {
+          const name = useSelectedRoute();
+          renderCount++;
+
+          return <span>{name}</span>;
+        };
+
+        const memHistory = createMemoryHistory({
+          initialEntries: ['/pages'],
+        });
+
+        render(
+          <RouterContainer
+            history={memHistory}
+            isGlobal
+            plugins={[]}
+            routes={routes}
+          >
+            <SelectedComponent />
+          </RouterContainer>
+        );
+
+        expect(renderCount).toBe(1);
+        expect(screen.getByText('pages')).toBeInTheDocument();
+
+        // Navigate to a path that matches the same route (same name)
+        // but changes query params - selected slice (route.name) stays the same
+        const { actions } = getRouterStore();
+        actions.push('/pages?foo=bar');
+
+        expect(renderCount).toBe(1);
+        expect(screen.getByText('pages')).toBeInTheDocument();
+      });
+
+      it('should re-render when selected slice changes', async () => {
+        let renderCount = 0;
+
+        const useSelectedRoute = createRouterSelector(s => s.route.name);
+
+        const SelectedComponent = () => {
+          const name = useSelectedRoute();
+          renderCount++;
+
+          return <span data-testid="route-name">{name}</span>;
+        };
+
+        const memHistory = createMemoryHistory({
+          initialEntries: ['/pages'],
+        });
+
+        const { findByText } = render(
+          <RouterContainer
+            history={memHistory}
+            isGlobal
+            plugins={[]}
+            routes={routes}
+          >
+            <SelectedComponent />
+          </RouterContainer>
+        );
+
+        expect(renderCount).toBe(1);
+        expect(screen.getByText('pages')).toBeInTheDocument();
+
+        // Navigate to a different route via history (triggers listener)
+        memHistory.push('/pages/1');
+
+        await findByText('page');
+        expect(renderCount).toBe(2);
       });
     });
   });

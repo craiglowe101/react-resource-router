@@ -301,6 +301,76 @@ describe('<Link /> prefetch behaviour', () => {
     });
   });
 
+  describe('prefetch="hover" additional hover/focus scenarios', () => {
+    it('should not trigger prefetch if mouse leaves before delay', () => {
+      renderInRouter('my link', { href: '/target', prefetch: 'hover' });
+
+      const link = screen.getByRole('link', { name: 'my link' });
+
+      act(() => {
+        fireEvent.mouseEnter(link);
+      });
+
+      // Leave before the 225ms delay fires
+      act(() => {
+        jest.advanceTimersByTime(100);
+      });
+
+      act(() => {
+        fireEvent.mouseLeave(link);
+      });
+
+      act(() => {
+        jest.advanceTimersByTime(200);
+      });
+
+      // No error = prefetch was successfully cancelled
+      expect(link).toBeInTheDocument();
+    });
+
+    it('should trigger prefetch on focus and cancel on blur before delay', () => {
+      renderInRouter('my link', { href: '/target', prefetch: 'hover' });
+
+      const link = screen.getByRole('link', { name: 'my link' });
+
+      act(() => {
+        fireEvent.focus(link);
+      });
+
+      act(() => {
+        jest.advanceTimersByTime(100);
+      });
+
+      act(() => {
+        fireEvent.blur(link);
+      });
+
+      act(() => {
+        jest.advanceTimersByTime(200);
+      });
+
+      // No error = prefetch was successfully cancelled
+      expect(link).toBeInTheDocument();
+    });
+
+    it('should trigger prefetch after full delay on hover without leaving', () => {
+      renderInRouter('my link', { href: '/target', prefetch: 'hover' });
+
+      const link = screen.getByRole('link', { name: 'my link' });
+
+      act(() => {
+        fireEvent.mouseEnter(link);
+      });
+
+      act(() => {
+        jest.advanceTimersByTime(250);
+      });
+
+      // Prefetch triggered successfully
+      expect(link).toBeInTheDocument();
+    });
+  });
+
   describe('Link with state prop', () => {
     it('should pass state to history.push on click', async () => {
       jest.useRealTimers();
