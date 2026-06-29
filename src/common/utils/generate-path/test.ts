@@ -115,4 +115,74 @@ describe('generatePath()', () => {
       });
     });
   });
+
+  describe('optional parameters', () => {
+    it('should resolve url with optional param present', () => {
+      const pattern = '/users/:id/:tab?';
+      const generated = generatePath(pattern, { id: '42', tab: 'settings' });
+      expect(generated).toBe('/users/42/settings');
+    });
+
+    it('should resolve url with optional param omitted', () => {
+      const pattern = '/users/:id/:tab?';
+      const generated = generatePath(pattern, { id: '42' });
+      expect(generated).toBe('/users/42');
+    });
+
+    it('should resolve url with multiple optional params all omitted', () => {
+      const pattern = '/page/:section?/:subsection?';
+      const generated = generatePath(pattern, {});
+      expect(generated).toBe('/page');
+    });
+
+    it('should resolve url with first optional param present, second omitted', () => {
+      const pattern = '/page/:section?/:subsection?';
+      const generated = generatePath(pattern, { section: 'docs' });
+      expect(generated).toBe('/page/docs');
+    });
+  });
+
+  describe('missing required parameters', () => {
+    it('should throw when a required param is missing entirely', () => {
+      const pattern = '/:org/:repo';
+      expect(() => generatePath(pattern, { org: 'acme' })).toThrow();
+    });
+
+    it('should throw when params object is empty for required params', () => {
+      const pattern = '/:id';
+      expect(() => generatePath(pattern, {})).toThrow();
+    });
+  });
+
+  describe('encoding of special characters', () => {
+    it('should pass through a param value with a space', () => {
+      const pattern = '/search/:query';
+      const generated = generatePath(pattern, { query: 'hello world' });
+      expect(generated).toBe('/search/hello world');
+    });
+
+    it('should throw when a param value contains a slash', () => {
+      const pattern = '/files/:name';
+      expect(() => generatePath(pattern, { name: 'foo/bar' })).toThrow();
+    });
+
+    it('should pass through special characters like @', () => {
+      const pattern = '/users/:email';
+      const generated = generatePath(pattern, {
+        email: 'user@example.com',
+      });
+      expect(generated).toBe('/users/user@example.com');
+    });
+
+    it('should pass through numeric params as strings', () => {
+      const pattern = '/items/:id';
+      const generated = generatePath(pattern, { id: 0 });
+      expect(generated).toBe('/items/0');
+    });
+
+    it('should throw for boolean param values', () => {
+      const pattern = '/flag/:value';
+      expect(() => generatePath(pattern, { value: false })).toThrow();
+    });
+  });
 });
