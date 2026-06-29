@@ -570,6 +570,67 @@ describe('matchRoute()', () => {
       expect(matchRoute([route], '/abc/def', parse('?foo=%2'))).toBeNull();
     });
 
+    it('should not crash on an invalid regex pattern in query config', () => {
+      const route = {
+        path: '/abc/:bar',
+        query: ['foo=([invalid'],
+        component: Noop,
+      };
+
+      expect(
+        // @ts-ignore
+        matchRoute([route], '/abc/def', parse('?foo=anything'))
+      ).toBeNull();
+    });
+
+    it('should reject regex patterns with nested quantifiers (ReDoS)', () => {
+      const route = {
+        path: '/abc/:bar',
+        query: ['foo=((a+)+)'],
+        component: Noop,
+      };
+
+      expect(
+        // @ts-ignore
+        matchRoute([route], '/abc/def', parse('?foo=aaa'))
+      ).toBeNull();
+    });
+
+    it('should reject regex patterns exceeding the maximum length', () => {
+      const longPattern = '(' + 'a'.repeat(250) + ')';
+      const route = {
+        path: '/abc/:bar',
+        query: [`foo=${longPattern}`],
+        component: Noop,
+      };
+
+      expect(
+        // @ts-ignore
+        matchRoute([route], '/abc/def', parse('?foo=aaa'))
+      ).toBeNull();
+    });
+
+    it('should still match safe regex patterns after ReDoS safeguards', () => {
+      const route = {
+        path: '/abc/:bar',
+        query: ['id=(\\d+)'],
+        component: Noop,
+      };
+
+      expect(
+        // @ts-ignore
+        matchRoute([route], '/abc/def', parse('?id=42'))
+      ).toMatchObject({
+        route,
+        match: { query: { id: '42' } },
+      });
+
+      expect(
+        // @ts-ignore
+        matchRoute([route], '/abc/def', parse('?id=abc'))
+      ).toBeNull();
+    });
+
     it('should handle non-standard characters', () => {
       const route = {
         path: '/abc/:bar',

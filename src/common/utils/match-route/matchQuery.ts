@@ -2,6 +2,15 @@ import { Match, MatchParams, Query } from '../../types';
 
 import { PathMatch } from './matchPath';
 
+const MAX_REGEX_LENGTH = 200;
+const NESTED_QUANTIFIER_RE = /([+*?}])\)*\s*[+*?{]/;
+
+function isSafePattern(pattern: string): boolean {
+  if (pattern.length > MAX_REGEX_LENGTH) return false;
+  if (NESTED_QUANTIFIER_RE.test(pattern)) return false;
+
+  return true;
+}
 /**
  * Matches `queryStr` against config stored in `queryConfig`.
  *
@@ -51,7 +60,15 @@ function matchQuery(
 
       if (value.startsWith('(')) {
         /* Handle value being a regexp eg 's=(\\d+)' */
-        match = new RegExp(`^${value}$`).test(queryParams[name] || '');
+        if (!isSafePattern(value)) {
+          match = false;
+        } else {
+          try {
+            match = new RegExp(`^${value}$`).test(queryParams[name] || '');
+          } catch {
+            match = false;
+          }
+        }
       } else {
         /* Handle value exact matching eg 's=123' */
         match = queryParams[name] === value;
