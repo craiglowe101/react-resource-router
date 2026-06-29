@@ -1,18 +1,46 @@
 // TAKEN FROM https://github.com/ReactTraining/react-router/blob/master/packages/react-router/modules/matchPath.js
 
-import { pathToRegexp } from 'path-to-regexp';
+import { Key, pathToRegexp } from 'path-to-regexp';
 
-const cache: { [key: string]: any } = {};
+import { MatchParams } from '../../types';
+
+export interface PathMatch {
+  path: string;
+  url: string;
+  isExact: boolean;
+  params: MatchParams;
+}
+
+interface CompileOptions {
+  end: boolean;
+  strict: boolean;
+  sensitive: boolean;
+}
+
+interface CompiledPath {
+  regexp: RegExp;
+  keys: Key[];
+}
+
+interface MatchPathOptions {
+  path?: string;
+  exact?: boolean;
+  strict?: boolean;
+  sensitive?: boolean;
+  basePath?: string;
+}
+
+const cache: Record<string, Record<string, CompiledPath>> = {};
 const cacheLimit = 10000;
 let cacheCount = 0;
 
-function compilePath(path: string, options: any) {
+function compilePath(path: string, options: CompileOptions): CompiledPath {
   const cacheKey = `${options.end}${options.strict}${options.sensitive}`;
   const pathCache = cache[cacheKey] || (cache[cacheKey] = {});
 
   if (pathCache[path]) return pathCache[path];
 
-  const keys: any[] = [];
+  const keys: Key[] = [];
   const regexp = pathToRegexp(path, keys, options);
   const result = { regexp, keys };
 
@@ -26,14 +54,13 @@ function compilePath(path: string, options: any) {
 
 /**
  * Public API for matching a URL pathname to a path.
- * TODO: reduce returns Array<never>
  */
 function matchPath(
   pathname: string,
-  options: { [key: string]: any } = {}
-): any {
+  options: MatchPathOptions = {}
+): PathMatch | null {
   if (typeof options === 'string' || Array.isArray(options)) {
-    options = { path: options };
+    options = { path: options as unknown as string };
   }
 
   const {
@@ -43,9 +70,9 @@ function matchPath(
     sensitive = false,
     basePath = '',
   } = options;
-  const paths = [].concat(basePath + p);
+  const paths: string[] = ([] as string[]).concat(basePath + (p || ''));
 
-  return paths.reduce((matched: any, path: any) => {
+  return paths.reduce((matched: PathMatch | null, path: string) => {
     if (!path && path !== '') return null;
     if (matched) return matched;
 
@@ -67,7 +94,7 @@ function matchPath(
       path, // the path used to match
       url: path === '/' && url === '' ? '/' : url, // the matched portion of the URL
       isExact, // whether or not we matched exactly
-      params: keys.reduce((memo: any, key: any, index: number) => {
+      params: keys.reduce((memo: MatchParams, key: Key, index: number) => {
         memo[key.name] = values[index];
 
         return memo;
