@@ -638,8 +638,8 @@ describe('matchRoute()', () => {
       const routeB = { path: '/foo/:baz', component: Noop };
 
       // populate cache with routeA
-      // @ts-ignore
       const first = matchRoute(
+        // @ts-ignore
         [routeA, routeB],
         '/foo/abc',
         DEFAULT_QUERY_PARAMS
@@ -717,8 +717,8 @@ describe('matchRoute()', () => {
     it('should not prepend basePath when pathname equals basePath', () => {
       const route = { path: '/mybase', component: Noop };
       const basePath = '/mybase';
-      // @ts-ignore
       const result = matchRoute(
+        // @ts-ignore
         [route],
         '/mybase',
         DEFAULT_QUERY_PARAMS,
@@ -732,8 +732,8 @@ describe('matchRoute()', () => {
     it('should prepend basePath for normal navigation', () => {
       const route = { path: '/foo', component: Noop };
       const basePath = '/base';
-      // @ts-ignore
       const result = matchRoute(
+        // @ts-ignore
         [route],
         '/base/foo',
         DEFAULT_QUERY_PARAMS,
@@ -748,8 +748,8 @@ describe('matchRoute()', () => {
     it('should return null when pathname does not include basePath for non-root paths', () => {
       const route = { path: '/foo', component: Noop };
       const basePath = '/base';
-      // @ts-ignore
       const result = matchRoute(
+        // @ts-ignore
         [route],
         '/foo',
         DEFAULT_QUERY_PARAMS,
