@@ -29,3 +29,5 @@ jobs:
       - run: npm run lint:types
       - run: npm run test
       - run: npm run build
+      - name: Audit runtime dependencies
+        run: npm audit --audit-level=high --omit=dev
