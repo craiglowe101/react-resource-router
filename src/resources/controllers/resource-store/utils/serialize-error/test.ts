@@ -118,6 +118,48 @@ describe('serializeError', () => {
     expect(result.message).toBe('type error');
     expect(result.stack).toEqual(expect.any(String));
   });
+
+  it('should handle RangeError', () => {
+    const error = new RangeError('out of range');
+    const result = serializeError(error);
+
+    expect(result.name).toBe('RangeError');
+    expect(result.message).toBe('out of range');
+  });
+
+  it('should handle an empty Error with no message', () => {
+    const error = new Error();
+    const result = serializeError(error);
+
+    expect(result.message).toBe('');
+    expect(result.name).toBe('Error');
+  });
+
+  it('should handle an object with mixed value types', () => {
+    const obj = {
+      count: 42,
+      label: 'test',
+      flag: true,
+      missing: null,
+      nothing: undefined,
+      method: () => {},
+    };
+    const result = serializeError(obj);
+
+    expect(result.count).toBe(42);
+    expect(result.label).toBe('test');
+    expect(result.flag).toBe(true);
+    expect(result.missing).toBeNull();
+    expect(result.method).toBeUndefined();
+  });
+
+  it('should handle Symbol values in error objects gracefully', () => {
+    const obj: any = { message: 'sym' };
+    obj[Symbol('hidden')] = 'invisible';
+    const result = serializeError(obj);
+
+    expect(result.message).toBe('sym');
+  });
 });
 
 describe('deserializeError', () => {
@@ -202,5 +244,39 @@ describe('deserializeError', () => {
     expect(result).toBeInstanceOf(Error);
     expect(result.message).toBe('circular');
     expect(result.self).toBe('[Circular]');
+  });
+
+  it('should create a NonError for boolean input', () => {
+    const result = deserializeError(false);
+
+    expect(result).toBeInstanceOf(Error);
+    expect(result.name).toBe('NonError');
+    expect(result.message).toBe('false');
+  });
+
+  it('should create a NonError for empty string input', () => {
+    const result = deserializeError('');
+
+    expect(result).toBeInstanceOf(Error);
+    expect(result.name).toBe('NonError');
+  });
+
+  it('should preserve stack from serialized object', () => {
+    const obj = {
+      message: 'with stack',
+      name: 'Error',
+      stack: 'Error: with stack\n    at test.ts:1:1',
+    };
+    const result = deserializeError(obj);
+
+    expect(result.stack).toBe('Error: with stack\n    at test.ts:1:1');
+  });
+
+  it('should handle object with only message', () => {
+    const obj = { message: 'just a message' };
+    const result = deserializeError(obj);
+
+    expect(result).toBeInstanceOf(Error);
+    expect(result.message).toBe('just a message');
   });
 });

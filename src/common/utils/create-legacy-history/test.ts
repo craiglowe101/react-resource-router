@@ -288,5 +288,87 @@ describe('createLegacyHistory()', () => {
       await triggerLocationChange('/foo2');
       expect(listener).toHaveBeenCalledTimes(1);
     });
+
+    it('should support multiple listeners', async () => {
+      const history = createLegacyHistory();
+      const listener1 = jest.fn();
+      const listener2 = jest.fn();
+      history.listen(listener1);
+      history.listen(listener2);
+      await triggerLocationChange('/multi');
+
+      expect(listener1).toHaveBeenCalledTimes(1);
+      expect(listener2).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not call unsubscribed listener while other listeners still fire', async () => {
+      const history = createLegacyHistory();
+      const listener1 = jest.fn();
+      const listener2 = jest.fn();
+      const unsub1 = history.listen(listener1);
+      history.listen(listener2);
+
+      await triggerLocationChange('/first');
+      unsub1();
+      await triggerLocationChange('/second');
+
+      expect(listener1).toHaveBeenCalledTimes(1);
+      expect(listener2).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('block()', () => {
+    it('should return a function', () => {
+      const history = createLegacyHistory();
+      const unblock = (history.block as () => () => void)();
+      expect(typeof unblock).toBe('function');
+    });
+  });
+
+  describe('createHref()', () => {
+    it('should create href from a location object', () => {
+      const history = createLegacyHistory() as any;
+      const href = history.createHref({
+        pathname: '/test',
+        search: '?a=1',
+        hash: '#top',
+      });
+      expect(href).toContain('/test');
+      expect(href).toContain('?a=1');
+      expect(href).toContain('#top');
+    });
+
+    it('should create href with only pathname', () => {
+      const history = createLegacyHistory() as any;
+      const href = history.createHref({
+        pathname: '/simple',
+        search: '',
+        hash: '',
+      });
+      expect(href).toBe('/simple');
+    });
+  });
+
+  describe('action', () => {
+    it('should default to PUSH', () => {
+      const history = createLegacyHistory();
+      expect(history.action).toBe('PUSH');
+    });
+  });
+
+  describe('length', () => {
+    it('should return window.history.length', () => {
+      const history = createLegacyHistory() as any;
+      expect(history.length).toBe(window.history.length);
+    });
+  });
+
+  describe('location with hash', () => {
+    it('should parse hash from location change', async () => {
+      const history = createLegacyHistory();
+      await triggerLocationChange('/page#section');
+      expect(history.location.pathname).toBe('/page');
+      expect(history.location.hash).toBe('#section');
+    });
   });
 });
