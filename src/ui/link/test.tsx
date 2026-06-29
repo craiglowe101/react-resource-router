@@ -445,4 +445,63 @@ describe('<Link />', () => {
       expect(anchorElement).toHaveStyle('color: yellow');
     });
   });
+
+  describe('click handling with modifier keys and target', () => {
+    it('should not intercept click when cmd key is held', async () => {
+      const user = userEvent.setup();
+      renderInRouter('my link', { href: newPath });
+
+      const link = screen.getByRole('link', { name: 'my link' });
+      link.addEventListener('click', e => e.preventDefault(), false);
+
+      await user.keyboard('[MetaLeft>]');
+      await user.click(link);
+
+      expect(HistoryMock.push).not.toHaveBeenCalled();
+    });
+
+    it('should not intercept click when ctrl key is held', async () => {
+      const user = userEvent.setup();
+      renderInRouter('my link', { href: newPath });
+
+      const link = screen.getByRole('link', { name: 'my link' });
+      link.addEventListener('click', e => e.preventDefault(), false);
+
+      await user.keyboard('[ControlLeft>]');
+      await user.click(link);
+
+      expect(HistoryMock.push).not.toHaveBeenCalled();
+    });
+
+    it('should not intercept click when shift key is held', async () => {
+      const user = userEvent.setup();
+      renderInRouter('my link', { href: newPath });
+
+      const link = screen.getByRole('link', { name: 'my link' });
+      link.addEventListener('click', e => e.preventDefault(), false);
+
+      await user.keyboard('[ShiftLeft>]');
+      await user.click(link);
+
+      expect(HistoryMock.push).not.toHaveBeenCalled();
+    });
+
+    it('should not intercept click when target is _blank', async () => {
+      const user = userEvent.setup();
+      renderInRouter('my link', { href: newPath, target: '_blank' });
+
+      await user.click(screen.getByRole('link', { name: 'my link' }));
+
+      expect(HistoryMock.push).not.toHaveBeenCalled();
+    });
+
+    it('should intercept click with no modifier keys and target _self', async () => {
+      const user = userEvent.setup();
+      renderInRouter('my link', { href: newPath, target: '_self' });
+
+      await user.click(screen.getByRole('link', { name: 'my link' }));
+
+      expect(HistoryMock.push).toHaveBeenCalledWith(newPath, undefined);
+    });
+  });
 });

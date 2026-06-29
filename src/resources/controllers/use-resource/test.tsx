@@ -263,6 +263,119 @@ describe('useResource()', () => {
     });
   });
 
+  describe('loading state', () => {
+    it('should reflect loading=true when resource is being fetched', () => {
+      storeState.setState({
+        data: {
+          [mockType]: {
+            [mockKey]: {
+              ...mockSlice,
+              loading: true,
+              data: null,
+            },
+          },
+        },
+      });
+
+      let resourceResponse: any;
+      render(
+        <MockComponent>
+          {() => {
+            resourceResponse = useResource(mockResource);
+
+            return <h1>test</h1>;
+          }}
+        </MockComponent>
+      );
+
+      expect(resourceResponse.loading).toBe(true);
+      expect(resourceResponse.data).toBeNull();
+    });
+
+    it('should reflect loading=false and data when resource is resolved', () => {
+      storeState.setState({
+        data: {
+          [mockType]: {
+            [mockKey]: {
+              ...mockSlice,
+              loading: false,
+              data: mockData,
+            },
+          },
+        },
+      });
+
+      let resourceResponse: any;
+      render(
+        <MockComponent>
+          {() => {
+            resourceResponse = useResource(mockResource);
+
+            return <h1>test</h1>;
+          }}
+        </MockComponent>
+      );
+
+      expect(resourceResponse.loading).toBe(false);
+      expect(resourceResponse.data).toBe(mockData);
+    });
+  });
+
+  describe('error state', () => {
+    it('should return the error when the resource has errored', () => {
+      const mockError = new Error('fetch failed');
+      storeState.setState({
+        data: {
+          [mockType]: {
+            [mockKey]: {
+              ...mockSlice,
+              loading: false,
+              error: mockError,
+              data: null,
+            },
+          },
+        },
+      });
+
+      let resourceResponse: any;
+      render(
+        <MockComponent>
+          {() => {
+            resourceResponse = useResource(mockResource);
+
+            return <h1>test</h1>;
+          }}
+        </MockComponent>
+      );
+
+      expect(resourceResponse.error).toBe(mockError);
+      expect(resourceResponse.data).toBeNull();
+      expect(resourceResponse.loading).toBe(false);
+    });
+  });
+
+  describe('data state', () => {
+    it('should return data=null initially when resource has not been fetched', () => {
+      storeState.setState({
+        data: {},
+      });
+
+      let resourceResponse: any;
+      render(
+        <MockComponent>
+          {() => {
+            resourceResponse = useResource(mockResource);
+
+            return <h1>test</h1>;
+          }}
+        </MockComponent>
+      );
+
+      expect(resourceResponse.data).toBeNull();
+      expect(resourceResponse.error).toBeNull();
+    });
+  });
+
   describe('clear action', () => {
     it('should clear the resource', () => {
       let resourceResponse: any;

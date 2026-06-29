@@ -303,6 +303,50 @@ describe('useQueryParam()', () => {
     expect(renderedBar).toEqual(3);
   });
 
+  it('should return a default value for missing params when using optional default', () => {
+    let qpVal: string | undefined;
+
+    render(
+      <Router history={history} routes={mockRoutes} plugins={[]}>
+        <MockComponent>
+          {() => {
+            const [param] = useQueryParam('nonexistent');
+            qpVal = param;
+
+            return null;
+          }}
+        </MockComponent>
+      </Router>
+    );
+
+    expect(qpVal).toEqual(undefined);
+  });
+
+  it('should update query param value after external navigation', () => {
+    let qpVal: string | undefined;
+
+    const Component = () => {
+      const [param] = useQueryParam('foo');
+      qpVal = param;
+
+      return null;
+    };
+
+    render(
+      <Router history={history} routes={mockRoutes} plugins={[]}>
+        <Component />
+      </Router>
+    );
+
+    expect(qpVal).toEqual('hello');
+
+    act(() => {
+      history.push('/projects/123/board/456?foo=updated&bar=world#hash');
+    });
+
+    expect(qpVal).toEqual('updated');
+  });
+
   it('should return the right param value when two hooks are used in the same component', async () => {
     const mockPath = mockLocation.pathname;
     let fooVal: string | undefined;

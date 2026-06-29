@@ -172,4 +172,35 @@ describe('<Redirect />', () => {
       expect(MockHistory.replace).not.toHaveBeenCalled();
     }
   );
+
+  describe('push vs replace behavior', () => {
+    it('should use replace by default (push=false)', () => {
+      mountInRouter({ to: '/new-page', push: false });
+      expect(MockHistory.replace).toHaveBeenCalledWith('/new-page', undefined);
+      expect(MockHistory.push).not.toHaveBeenCalled();
+    });
+
+    it('should use push when push=true', () => {
+      mountInRouter({ to: '/new-page', push: true });
+      expect(MockHistory.push).toHaveBeenCalledWith('/new-page', undefined);
+      expect(MockHistory.replace).not.toHaveBeenCalled();
+    });
+
+    it('should use replace with route object when push=false', () => {
+      mountInRouter({ to: mockRoute, params: { id: '5' }, push: false });
+      expect(MockHistory.replace).toHaveBeenCalledWith('/5', undefined);
+      expect(MockHistory.push).not.toHaveBeenCalled();
+    });
+
+    it('should use push with route object and query when push=true', () => {
+      mountInRouter({
+        to: mockRoute,
+        params: { id: '7' },
+        query: { foo: 'baz' },
+        push: true,
+      });
+      expect(MockHistory.push).toHaveBeenCalledWith('/7?foo=baz', undefined);
+      expect(MockHistory.replace).not.toHaveBeenCalled();
+    });
+  });
 });
