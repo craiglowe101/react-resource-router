@@ -571,6 +571,249 @@ describe('RouterStore', () => {
       });
     });
 
+    describe('goBack()', () => {
+      it('navigates back in history', () => {
+        const hist = createMemoryHistory({ initialEntries: [location] });
+        const { actions, getState } = renderRouterContainer({
+          history: hist,
+        });
+
+        // push a new entry so there is something to go back to
+        actions.push('/pages/1');
+        expect(getState().location.pathname).toBe('/pages/1');
+
+        actions.goBack();
+
+        expect(getState().location.pathname).toBe('/pages');
+      });
+    });
+
+    describe('goForward()', () => {
+      it('navigates forward in history', () => {
+        const hist = createMemoryHistory({ initialEntries: [location] });
+        const { actions, getState } = renderRouterContainer({
+          history: hist,
+        });
+
+        // push, then go back, then go forward
+        actions.push('/pages/1');
+        actions.goBack();
+        expect(getState().location.pathname).toBe('/pages');
+
+        actions.goForward();
+
+        expect(getState().location.pathname).toBe('/pages/1');
+      });
+    });
+
+    describe('history listener shape', () => {
+      it('updates state correctly when history fires a location change', () => {
+        const { actions, getState } = renderRouterContainer();
+
+        // push triggers the history listener internally
+        actions.push('/pages/1');
+
+        const state = getState();
+        expect(state.location.pathname).toBe('/pages/1');
+        expect(state.action).toBe('PUSH');
+        expect(state.route).toBe(routes[1]);
+        expect(state.match.params).toEqual({ id: '1' });
+      });
+
+      it('handles replace action through the listener', () => {
+        const { actions, getState } = renderRouterContainer();
+
+        actions.replace('/pages/1');
+
+        const state = getState();
+        expect(state.location.pathname).toBe('/pages/1');
+        expect(state.action).toBe('REPLACE');
+        expect(state.route).toBe(routes[1]);
+      });
+    });
+
+    describe('plugin lifecycle ordering', () => {
+      it('fires beforeRouteLoad, then setState, then routeLoad in order', () => {
+        const callOrder: string[] = [];
+
+        const plugin = {
+          id: 'ordering-plugin',
+          beforeRouteLoad: jest.fn(() => {
+            callOrder.push('beforeRouteLoad');
+          }),
+          routeLoad: jest.fn(() => {
+            callOrder.push('routeLoad');
+          }),
+        };
+
+        const { actions, getState } = renderRouterContainer({
+          plugins: [plugin],
+        });
+
+        // reset call order after initial render
+        callOrder.length = 0;
+        plugin.beforeRouteLoad.mockClear();
+        plugin.routeLoad.mockClear();
+
+        actions.push({ pathname: '/pages/1', search: '', hash: '' });
+
+        expect(plugin.beforeRouteLoad).toHaveBeenCalledTimes(1);
+        expect(plugin.routeLoad).toHaveBeenCalledTimes(1);
+
+        // beforeRouteLoad must fire before routeLoad
+        expect(callOrder).toEqual(['beforeRouteLoad', 'routeLoad']);
+
+        // state should reflect the new route after the batch
+        expect(getState().route).toBe(routes[1]);
+      });
+
+      it('fires plugin hooks for multiple plugins in registration order', () => {
+        const callOrder: string[] = [];
+
+        const pluginA = {
+          id: 'plugin-a',
+          beforeRouteLoad: jest.fn(() => callOrder.push('A:beforeRouteLoad')),
+          routeLoad: jest.fn(() => callOrder.push('A:routeLoad')),
+        };
+        const pluginB = {
+          id: 'plugin-b',
+          beforeRouteLoad: jest.fn(() => callOrder.push('B:beforeRouteLoad')),
+          routeLoad: jest.fn(() => callOrder.push('B:routeLoad')),
+        };
+
+        const { actions } = renderRouterContainer({
+          plugins: [pluginA, pluginB],
+        });
+
+        callOrder.length = 0;
+        actions.push({ pathname: '/pages/1', search: '', hash: '' });
+
+        expect(callOrder).toEqual([
+          'A:beforeRouteLoad',
+          'B:beforeRouteLoad',
+          'A:routeLoad',
+          'B:routeLoad',
+        ]);
+      });
+    });
+
+    describe('shouldReloadByPlugin gating', () => {
+      it('does not call plugin hooks when route/match/query are unchanged for non-resources plugins', () => {
+        const plugin = {
+          id: 'custom-plugin',
+          beforeRouteLoad: jest.fn(),
+          routeLoad: jest.fn(),
+        };
+
+        const { actions } = renderRouterContainer({ plugins: [plugin] });
+        plugin.beforeRouteLoad.mockClear();
+        plugin.routeLoad.mockClear();
+
+        // push to the same path — route/match/query do not change
+        actions.push({
+          pathname: '/pages',
+          search: '?key=value',
+          hash: '#hash',
+        });
+
+        expect(plugin.beforeRouteLoad).not.toHaveBeenCalled();
+        // routeLoad should also not be called for non-resources plugins
+        expect(plugin.routeLoad).not.toHaveBeenCalled();
+      });
+
+      it('calls plugin hooks for resources-plugin even when route/match are unchanged', () => {
+        const resourcesPlugin = {
+          id: 'resources-plugin',
+          beforeRouteLoad: jest.fn(),
+          routeLoad: jest.fn(),
+        };
+
+        const { actions } = renderRouterContainer({
+          plugins: [resourcesPlugin],
+        });
+        resourcesPlugin.beforeRouteLoad.mockClear();
+        resourcesPlugin.routeLoad.mockClear();
+
+        // push to same route with different query
+        actions.push({ pathname: '/pages', search: '?a=1', hash: '' });
+
+        expect(resourcesPlugin.beforeRouteLoad).toHaveBeenCalled();
+        expect(resourcesPlugin.routeLoad).toHaveBeenCalled();
+      });
+
+      it('calls plugin hooks for all plugins when the route changes', () => {
+        const customPlugin = {
+          id: 'custom-plugin',
+          beforeRouteLoad: jest.fn(),
+          routeLoad: jest.fn(),
+        };
+        const resourcesPlugin = {
+          id: 'resources-plugin',
+          beforeRouteLoad: jest.fn(),
+          routeLoad: jest.fn(),
+        };
+
+        const { actions } = renderRouterContainer({
+          plugins: [customPlugin, resourcesPlugin],
+        });
+        customPlugin.beforeRouteLoad.mockClear();
+        customPlugin.routeLoad.mockClear();
+        resourcesPlugin.beforeRouteLoad.mockClear();
+        resourcesPlugin.routeLoad.mockClear();
+
+        actions.push({ pathname: '/pages/1', search: '', hash: '' });
+
+        expect(customPlugin.beforeRouteLoad).toHaveBeenCalledTimes(1);
+        expect(customPlugin.routeLoad).toHaveBeenCalledTimes(1);
+        expect(resourcesPlugin.beforeRouteLoad).toHaveBeenCalledTimes(1);
+        expect(resourcesPlugin.routeLoad).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe('SSR branching', () => {
+      it('does not call history.listen() in a server environment during bootstrap', () => {
+        jest
+          .spyOn(isServerEnvironment, 'isServerEnvironment')
+          .mockReturnValue(true);
+
+        const { history } = renderRouterContainer();
+
+        expect(history.listen).not.toHaveBeenCalled();
+      });
+
+      it('does not call loadPlugins in a server environment', () => {
+        jest
+          .spyOn(isServerEnvironment, 'isServerEnvironment')
+          .mockReturnValue(true);
+
+        const plugin = {
+          id: 'test-ssr-plugin',
+          routeLoad: jest.fn(),
+        };
+
+        renderRouterContainer({ plugins: [plugin] });
+
+        // routeLoad is only called via loadPlugins on init in non-server env
+        expect(plugin.routeLoad).not.toHaveBeenCalled();
+      });
+
+      it('sets unlisten to null in a server environment', () => {
+        jest
+          .spyOn(isServerEnvironment, 'isServerEnvironment')
+          .mockReturnValue(true);
+
+        const { getState } = renderRouterContainer();
+
+        expect(getState().unlisten).toBeNull();
+      });
+
+      it('sets unlisten to a function in a client environment', () => {
+        const { getState } = renderRouterContainer();
+
+        expect(getState().unlisten).toEqual(expect.any(Function));
+      });
+    });
+
     describe('createRouterSelector()', () => {
       it('should return selected state', () => {
         const routeNameSelector = jest

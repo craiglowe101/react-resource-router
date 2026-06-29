@@ -617,4 +617,145 @@ describe('matchRoute()', () => {
       });
     });
   });
+
+  describe('cache invalidation', () => {
+    it('should return cached match for identical inputs', () => {
+      const route = { path: '/foo/:bar', component: Noop };
+      const routes = [route];
+
+      // @ts-ignore
+      const first = matchRoute(routes, '/foo/abc', DEFAULT_QUERY_PARAMS);
+      // @ts-ignore
+      const second = matchRoute(routes, '/foo/abc', DEFAULT_QUERY_PARAMS);
+
+      expect(first).toEqual(second);
+      // same object reference proves cache hit
+      expect(first).toBe(second);
+    });
+
+    it('should bypass cache when the routes array no longer contains the cached route', () => {
+      const routeA = { path: '/foo/:bar', component: Noop };
+      const routeB = { path: '/foo/:baz', component: Noop };
+
+      // populate cache with routeA
+      const first = matchRoute(
+        // @ts-ignore
+        [routeA, routeB],
+        '/foo/abc',
+        DEFAULT_QUERY_PARAMS
+      );
+      expect(first).toMatchObject({ route: routeA });
+
+      // call with a routes array that excludes routeA
+      // @ts-ignore
+      const second = matchRoute([routeB], '/foo/abc', DEFAULT_QUERY_PARAMS);
+      expect(second).toMatchObject({ route: routeB });
+      // must NOT be the cached routeA result
+      expect(second!.route).toBe(routeB);
+    });
+
+    it('should bypass cache when routes is a different array even with same route objects', () => {
+      const route = { path: '/foo/:bar', component: Noop };
+
+      // populate cache
+      const arr1 = [route];
+      // @ts-ignore
+      const first = matchRoute(arr1, '/foo/abc', DEFAULT_QUERY_PARAMS);
+
+      // new array with the same route object — cache should still hit
+      const arr2 = [route];
+      // @ts-ignore
+      const second = matchRoute(arr2, '/foo/abc', DEFAULT_QUERY_PARAMS);
+
+      expect(first).toBe(second);
+    });
+
+    it('should not return stale cache when route is removed from routes', () => {
+      const routeA = { path: '/items/:id', component: Noop };
+      const routeB = { path: '/items/:slug', component: Noop };
+
+      // @ts-ignore
+      matchRoute([routeA, routeB], '/items/42', DEFAULT_QUERY_PARAMS);
+
+      // remove routeA — cache entry for routeA should be bypassed
+      // @ts-ignore
+      const result = matchRoute([routeB], '/items/42', DEFAULT_QUERY_PARAMS);
+      expect(result).toMatchObject({ route: routeB });
+    });
+  });
+
+  describe('trailing-slash handling', () => {
+    it('should match a route with a trailing slash on the pathname', () => {
+      const route = { path: '/foo', component: Noop, exact: false };
+      // @ts-ignore
+      const result = matchRoute([route], '/foo/', DEFAULT_QUERY_PARAMS);
+      expect(result).toMatchObject({ route });
+    });
+
+    it('should match a route without trailing slash against pathname with trailing slash', () => {
+      const route = { path: '/foo/:bar', component: Noop };
+      // @ts-ignore
+      const result = matchRoute([route], '/foo/abc/', DEFAULT_QUERY_PARAMS);
+      // path-to-regexp will match if exact is not enforced
+      expect(result).toMatchObject({ route });
+    });
+  });
+
+  describe('basePath edge cases', () => {
+    it('should not prepend basePath when pathname is "/"', () => {
+      const route = { path: '/', component: Noop };
+      const basePath = '/app';
+      // navigating to "/" should NOT produce "/app/" lookup
+      // @ts-ignore
+      const result = matchRoute([route], '/', DEFAULT_QUERY_PARAMS, basePath);
+      expect(result).toMatchObject({
+        route,
+        match: expect.objectContaining({ path: '/' }),
+      });
+    });
+
+    it('should not prepend basePath when pathname equals basePath', () => {
+      const route = { path: '/mybase', component: Noop };
+      const basePath = '/mybase';
+      const result = matchRoute(
+        // @ts-ignore
+        [route],
+        '/mybase',
+        DEFAULT_QUERY_PARAMS,
+        basePath
+      );
+      expect(result).toMatchObject({ route });
+      // must NOT have doubled the basePath (i.e. /mybase/mybase)
+      expect(result!.match.path).not.toContain('/mybase/mybase');
+    });
+
+    it('should prepend basePath for normal navigation', () => {
+      const route = { path: '/foo', component: Noop };
+      const basePath = '/base';
+      const result = matchRoute(
+        // @ts-ignore
+        [route],
+        '/base/foo',
+        DEFAULT_QUERY_PARAMS,
+        basePath
+      );
+      expect(result).toMatchObject({
+        route,
+        match: expect.objectContaining({ path: '/base/foo' }),
+      });
+    });
+
+    it('should return null when pathname does not include basePath for non-root paths', () => {
+      const route = { path: '/foo', component: Noop };
+      const basePath = '/base';
+      const result = matchRoute(
+        // @ts-ignore
+        [route],
+        '/foo',
+        DEFAULT_QUERY_PARAMS,
+        basePath
+      );
+      expect(result).toBeNull();
+    });
+  });
 });

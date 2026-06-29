@@ -85,4 +85,97 @@ describe('setSsrDataPromise', () => {
     expect(result.expiresAt).toBe(12345);
     expect(result.accessedAt).toBe(67890);
   });
+
+  it('should hydrate with undefined data when promise is null', async () => {
+    const slice = {
+      data: undefined,
+      error: null,
+      loading: false,
+      promise: null,
+      expiresAt: null,
+      accessedAt: null,
+    };
+
+    const result = setSsrDataPromise(slice as any);
+
+    expect(result.promise).toBeInstanceOf(Promise);
+    const resolved = await result.promise;
+    expect(resolved).toBeUndefined();
+  });
+
+  it('should not mutate the original slice', () => {
+    const slice = {
+      data: 'original',
+      error: null,
+      loading: false,
+      promise: null,
+      expiresAt: null,
+      accessedAt: null,
+    };
+
+    const result = setSsrDataPromise(slice as any);
+
+    expect(slice.promise).toBeNull();
+    expect(result.promise).toBeInstanceOf(Promise);
+    expect(result).not.toBe(slice);
+  });
+
+  it('should preserve error state when hydrating with null promise', () => {
+    const error = new Error('SSR error');
+    const slice = {
+      data: null,
+      error,
+      loading: false,
+      promise: null,
+      expiresAt: null,
+      accessedAt: null,
+    };
+
+    const result = setSsrDataPromise(slice as any);
+
+    expect(result.error).toBe(error);
+    expect(result.promise).toBeInstanceOf(Promise);
+  });
+
+  it('should handle complex data types during hydration', async () => {
+    const complexData = {
+      users: [{ id: 1, name: 'Alice' }],
+      meta: { total: 100, page: 1 },
+    };
+    const slice = {
+      data: complexData,
+      error: null,
+      loading: false,
+      promise: null,
+      expiresAt: null,
+      accessedAt: null,
+    };
+
+    const result = setSsrDataPromise(slice as any);
+    const resolved = await result.promise;
+
+    expect(resolved).toBe(complexData);
+    expect(resolved).toEqual({
+      users: [{ id: 1, name: 'Alice' }],
+      meta: { total: 100, page: 1 },
+    });
+  });
+
+  it('should return original slice reference when promise already exists', () => {
+    const existingPromise = Promise.resolve('data');
+    const slice = {
+      data: 'data',
+      error: null,
+      loading: true,
+      promise: existingPromise,
+      expiresAt: null,
+      accessedAt: null,
+    };
+
+    const result = setSsrDataPromise(slice as any);
+    const result2 = setSsrDataPromise(slice as any);
+
+    expect(result).toBe(slice);
+    expect(result2).toBe(slice);
+  });
 });
