@@ -37,6 +37,7 @@ const Link = forwardRef<HTMLButtonElement | HTMLAnchorElement, LinkProps>(
       onFocus = undefined,
       onBlur = undefined,
       type: linkType = 'a',
+      rel,
       params,
       query,
       prefetch = false,
@@ -147,10 +148,14 @@ const Link = forwardRef<HTMLButtonElement | HTMLAnchorElement, LinkProps>(
       onPointerDown && onPointerDown(e);
     };
 
+    const computedRel =
+      rel ?? (target !== '_self' ? 'noopener noreferrer' : undefined);
+
     return createElement(
       validLinkType,
       {
         ...rest,
+        rel: computedRel,
         href: `${staticBasePath}${linkDestination}`,
         target,
         onClick: handleLinkPress,

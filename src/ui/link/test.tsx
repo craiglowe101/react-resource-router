@@ -384,6 +384,48 @@ describe('<Link />', () => {
     });
   });
 
+  describe('rel attribute for target values', () => {
+    it('should add rel="noopener noreferrer" when target is _blank', () => {
+      renderInRouter('my link', { ...defaultProps, target: '_blank' });
+      const anchor = screen.getByRole('link', { name: 'my link' });
+      expect(anchor).toHaveAttribute('rel', 'noopener noreferrer');
+    });
+
+    it('should add rel="noopener noreferrer" when target is _parent', () => {
+      renderInRouter('my link', { ...defaultProps, target: '_parent' });
+      const anchor = screen.getByRole('link', { name: 'my link' });
+      expect(anchor).toHaveAttribute('rel', 'noopener noreferrer');
+    });
+
+    it('should add rel="noopener noreferrer" when target is _top', () => {
+      renderInRouter('my link', { ...defaultProps, target: '_top' });
+      const anchor = screen.getByRole('link', { name: 'my link' });
+      expect(anchor).toHaveAttribute('rel', 'noopener noreferrer');
+    });
+
+    it('should not add rel when target is _self (default)', () => {
+      renderInRouter('my link', { ...defaultProps });
+      const anchor = screen.getByRole('link', { name: 'my link' });
+      expect(anchor).not.toHaveAttribute('rel');
+    });
+
+    it('should not add rel when target is explicitly _self', () => {
+      renderInRouter('my link', { ...defaultProps, target: '_self' });
+      const anchor = screen.getByRole('link', { name: 'my link' });
+      expect(anchor).not.toHaveAttribute('rel');
+    });
+
+    it('should allow a user-supplied rel to override the default', () => {
+      renderInRouter('my link', {
+        ...defaultProps,
+        target: '_blank',
+        rel: 'noopener',
+      });
+      const anchor = screen.getByRole('link', { name: 'my link' });
+      expect(anchor).toHaveAttribute('rel', 'noopener');
+    });
+  });
+
   describe('when styles are passed into Link, element should be rendered with styles', () => {
     it('should add style to button when creating `button`', () => {
       renderInRouter('my link', {
