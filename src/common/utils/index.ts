@@ -1,6 +1,7 @@
 export { createLegacyHistory } from './create-legacy-history';
 export { generateLocationFromPath } from './generate-location';
 export { generatePath } from './generate-path';
+export { isSafeUrl } from './is-safe-url';
 export { isServerEnvironment } from './is-server-environment';
 export {
   default as matchRoute,

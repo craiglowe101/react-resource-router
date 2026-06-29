@@ -359,6 +359,22 @@ describe('RouterStore', () => {
         expect(assign).toBeCalledWith('http://example.com');
       });
 
+      it('throws when pushing a javascript: URL', () => {
+        const { actions } = renderRouterContainer();
+
+        expect(() => actions.push('javascript://example.com')).toThrow(
+          'Blocked navigation to unsafe URL'
+        );
+      });
+
+      it('throws when pushing a data: URL', () => {
+        const { actions } = renderRouterContainer();
+
+        expect(() =>
+          actions.push('data://text/html,<script>alert(1)</script>')
+        ).toThrow('Blocked navigation to unsafe URL');
+      });
+
       it('passes state when passed to push', () => {
         const basePath = '/base-path';
         const { actions, getState, history } = renderRouterContainer({
@@ -471,6 +487,22 @@ describe('RouterStore', () => {
         actions.replace('http://example.com');
 
         expect(replace).toBeCalledWith('http://example.com');
+      });
+
+      it('throws when replacing with a javascript: URL', () => {
+        const { actions } = renderRouterContainer();
+
+        expect(() => actions.replace('javascript://example.com')).toThrow(
+          'Blocked navigation to unsafe URL'
+        );
+      });
+
+      it('throws when replacing with a data: URL', () => {
+        const { actions } = renderRouterContainer();
+
+        expect(() =>
+          actions.replace('data://text/html,<script>alert(1)</script>')
+        ).toThrow('Blocked navigation to unsafe URL');
       });
 
       it('it passes state to replace', () => {
