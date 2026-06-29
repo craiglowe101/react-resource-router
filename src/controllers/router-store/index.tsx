@@ -17,6 +17,7 @@ import {
 import { Query } from '../../common/types';
 import {
   findRouterContext,
+  isSafeUrl,
   isServerEnvironment,
   generatePath as generatePathUsingPathParams,
   generateLocationFromPath,
@@ -178,6 +179,9 @@ const actions: AllRouterActions = {
     ({ getState }) => {
       const { history, basePath } = getState();
       if (isExternalAbsolutePath(path)) {
+        if (!isSafeUrl(path as string)) {
+          throw new Error(`Blocked navigation to unsafe URL: ${String(path)}`);
+        }
         window.location.assign(path as string);
       } else {
         history.push(getRelativePath(path, basePath), state);
@@ -206,6 +210,9 @@ const actions: AllRouterActions = {
     ({ getState }) => {
       const { history, basePath } = getState();
       if (isExternalAbsolutePath(path)) {
+        if (!isSafeUrl(path as string)) {
+          throw new Error(`Blocked navigation to unsafe URL: ${String(path)}`);
+        }
         window.location.replace(path as string);
       } else {
         history.replace(getRelativePath(path, basePath) as any, state);

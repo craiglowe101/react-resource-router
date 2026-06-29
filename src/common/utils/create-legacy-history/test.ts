@@ -136,6 +136,24 @@ describe('createLegacyHistory()', () => {
 
       expect(spy).toHaveBeenCalledWith('/other?param=1');
     });
+
+    it('should throw when pushing a javascript: URL', () => {
+      const history = createLegacyHistory();
+
+      expect(() => history.push('javascript://example.com')).toThrow(
+        'Blocked navigation to unsafe URL'
+      );
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('should throw when pushing a data: URL', () => {
+      const history = createLegacyHistory();
+
+      expect(() =>
+        history.push('data:text/html,<script>alert(1)</script>')
+      ).toThrow('Blocked navigation to unsafe URL');
+      expect(spy).not.toHaveBeenCalled();
+    });
   });
 
   describe('replace()', () => {

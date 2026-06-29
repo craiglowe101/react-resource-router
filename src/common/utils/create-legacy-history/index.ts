@@ -3,6 +3,7 @@ import debounce from 'lodash.debounce';
 import noop from 'lodash.noop';
 
 import { BrowserHistory, Location } from '../../types';
+import { isSafeUrl } from '../is-safe-url';
 
 type HistoryAction = 'POP' | 'PUSH' | 'REPLACE';
 type Listener = (location: Location, action: HistoryAction) => void;
@@ -110,10 +111,14 @@ export const createLegacyHistory = (): BrowserHistory => {
     },
     ...(hasWindow()
       ? {
-          push: (path: string | Location) =>
-            window.location.assign(
-              typeof path === 'string' ? path : createPath(path || {})
-            ),
+          push: (path: string | Location) => {
+            const url =
+              typeof path === 'string' ? path : createPath(path || {});
+            if (!isSafeUrl(url)) {
+              throw new Error(`Blocked navigation to unsafe URL: ${url}`);
+            }
+            window.location.assign(url);
+          },
           replace: (path: string | Location) =>
             window.history.replaceState(
               {},
