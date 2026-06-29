@@ -198,7 +198,6 @@ export interface Plugin {
     context: RouterContext;
     nextContext: RouterContext;
   }) => void;
-  [key: string]: any;
 }
 
 export type ShouldReloadFunction = (params: {

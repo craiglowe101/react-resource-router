@@ -8,8 +8,9 @@ export function generateLocationFromPath(
   options: GenerateLocationOptions = {}
 ): Location {
   const { params = {}, query = {}, basePath = '' } = options;
-  // @ts-ignore stringify accepts two params but it's type doesn't say so
-  const stringifiedQuery = qs.stringify(query, true);
+  const stringifiedQuery = (
+    qs.stringify as (q: object, prefix: boolean) => string
+  )(query, true);
   const pathname = pattern === '/' ? pattern : compile(pattern)(params);
 
   return {

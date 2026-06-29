@@ -45,6 +45,7 @@ const beforeLoad = ({
 type LoadedResources = Promise<RouteResourceResponse<unknown>[]>;
 
 interface ResourcesPlugin extends Plugin {
+  getLatestResources: () => LoadedResources;
   getSerializedResources: () => Promise<ResourceStoreData>;
 }
 

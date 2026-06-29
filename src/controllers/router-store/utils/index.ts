@@ -56,8 +56,9 @@ export const getRelativePath = (
 };
 
 export const updateQueryParams = (location: Location, query: Query): string => {
-  // @ts-ignore stringify accepts two params but it's type doesn't say so
-  const stringifiedQuery = qs.stringify(query, true);
+  const stringifiedQuery = (
+    qs.stringify as (q: object, prefix: boolean) => string
+  )(query, true);
 
   return `${location.pathname}${stringifiedQuery}${location.hash}`;
 };

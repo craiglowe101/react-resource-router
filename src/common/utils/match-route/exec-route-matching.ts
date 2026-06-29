@@ -1,15 +1,14 @@
 import { Query, Route, InvariantRoute, Match } from '../../types';
 
-import matchPath from './matchPath';
+import matchPath, { PathMatch } from './matchPath';
 import matchQuery from './matchQuery';
 
 /* This should match what react-router does to compute a root match. */
-const computeRootMatch = (pathname: string) => ({
+const computeRootMatch = (pathname: string): PathMatch => ({
   path: '/',
   url: '/',
   params: {},
   isExact: pathname === '/',
-  query: {},
 });
 
 function execRouteMatching<T extends Route | InvariantRoute>(
@@ -18,14 +17,14 @@ function execRouteMatching<T extends Route | InvariantRoute>(
   queryObj: Query,
   basePath: string
 ): { route: T; match: Match } | null {
-  const pathMatch = route.path
+  const pathMatch: PathMatch | null = route.path
     ? matchPath(pathname, {
         path: route.path,
         exact: route.exact,
         basePath,
       })
     : computeRootMatch(pathname);
-  let match = pathMatch;
+  let match: Match | null = null;
 
   if (pathMatch && route.query) {
     match = matchQuery(route.query, queryObj, pathMatch);

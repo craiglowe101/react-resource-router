@@ -13,10 +13,15 @@ class NonError extends Error {
   }
 }
 
-const commonProperties = ['name', 'message', 'stack', 'code'];
+const commonProperties = ['name', 'message', 'stack', 'code'] as const;
 
-const destroyCircular = (from: any, seen: any, to_?: any) => {
-  const to = to_ || (Array.isArray(from) ? [] : {});
+const destroyCircular = (
+  from: Record<string, unknown>,
+  seen: Record<string, unknown>[],
+  to_?: Record<string, unknown>
+): Record<string, unknown> => {
+  const to: Record<string, unknown> =
+    to_ || ((Array.isArray(from) ? [] : {}) as Record<string, unknown>);
 
   seen.push(from);
 
@@ -30,8 +35,11 @@ const destroyCircular = (from: any, seen: any, to_?: any) => {
       continue;
     }
 
-    if (!seen.includes(from[key])) {
-      to[key] = destroyCircular(from[key], seen.slice());
+    if (!seen.includes(from[key] as Record<string, unknown>)) {
+      to[key] = destroyCircular(
+        from[key] as Record<string, unknown>,
+        seen.slice()
+      );
       continue;
     }
 
@@ -47,32 +55,42 @@ const destroyCircular = (from: any, seen: any, to_?: any) => {
   return to;
 };
 
-// const serializeError = <ErrorType = any>(value: ErrorType) => {
-export const serializeError = (value: any) => {
+export interface SerializedResult {
+  [key: string]: SerializedResult;
+}
+
+export const serializeError = (value: unknown): SerializedResult => {
   if (typeof value === 'object' && value !== null) {
-    return destroyCircular(value, []);
+    return destroyCircular(
+      value as Record<string, unknown>,
+      []
+    ) as unknown as SerializedResult;
   }
 
   // People sometimes throw things besides Error objects…
   if (typeof value === 'function') {
     // `JSON.stringify()` discards functions. We do too, unless a function is thrown directly.
-    return `[Function: ${value.name || 'anonymous'}]`;
+    return `[Function: ${(value as { name?: string }).name || 'anonymous'}]` as unknown as SerializedResult;
   }
 
-  return value;
+  return value as unknown as SerializedResult;
 };
 
-export const deserializeError = (value: any) => {
+export const deserializeError = (value: unknown): Error => {
   if (value instanceof Error) {
     return value;
   }
 
   if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
     const newError = new Error();
-    destroyCircular(value, [], newError);
+    destroyCircular(
+      value as Record<string, unknown>,
+      [],
+      newError as unknown as Record<string, unknown>
+    );
 
     return newError;
   }
 
-  return new NonError(value);
+  return new NonError(String(value));
 };

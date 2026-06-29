@@ -1,5 +1,7 @@
 import { Match, MatchParams, Query } from '../../types';
 
+import { PathMatch } from './matchPath';
+
 /**
  * Matches `queryStr` against config stored in `queryConfig`.
  *
@@ -10,7 +12,7 @@ import { Match, MatchParams, Query } from '../../types';
 function matchQuery(
   queryConfig: string[],
   queryParams: MatchParams,
-  pathMatch: Match
+  pathMatch: PathMatch
 ): Match | null {
   const queryMatch: Query = {};
   const isMatchingQuery = queryConfig.every(query => {
