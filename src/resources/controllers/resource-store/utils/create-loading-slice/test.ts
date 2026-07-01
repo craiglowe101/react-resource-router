@@ -280,7 +280,118 @@ describe('createLoadingSlice', () => {
       jest.useRealTimers();
     });
 
-    it('should race getData against timeout when timeout option is provided', async () => {
+    it('should reject with TimeoutError when time guard fires before async getData resolves', async () => {
+      const resource = {
+        ...baseResource,
+        getData: jest.fn(
+          () => new Promise(resolve => setTimeout(() => resolve('data'), 200))
+        ),
+      };
+
+      const slice = createLoadingSlice({
+        context: baseContext,
+        dependencies: baseDependencies,
+        options: { timeout: 50 },
+        resource,
+        routerStoreContext: baseRouterStoreContext,
+      });
+
+      jest.advanceTimersByTime(50);
+
+      await expect(slice.promise).rejects.toThrow(TimeoutError);
+      await expect(slice.promise).rejects.toThrow(
+        'Resource timed out: test-resource'
+      );
+    });
+
+    it('should reject with TimeoutError containing the resource type', async () => {
+      const resource = {
+        ...baseResource,
+        type: 'my-custom-resource',
+        getData: jest.fn(
+          () => new Promise(resolve => setTimeout(() => resolve('slow'), 1000))
+        ),
+      };
+
+      const slice = createLoadingSlice({
+        context: baseContext,
+        dependencies: baseDependencies,
+        options: { timeout: 100 },
+        resource,
+        routerStoreContext: baseRouterStoreContext,
+      });
+
+      jest.advanceTimersByTime(100);
+
+      await expect(slice.promise).rejects.toThrow(
+        'Resource timed out: my-custom-resource'
+      );
+    });
+
+    it('should resolve with data and clear the timer when async getData resolves before timeout', async () => {
+      const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
+      const resource = {
+        ...baseResource,
+        getData: jest.fn(
+          () =>
+            new Promise(resolve => setTimeout(() => resolve('fast-data'), 10))
+        ),
+      };
+
+      const slice = createLoadingSlice({
+        context: baseContext,
+        dependencies: baseDependencies,
+        options: { timeout: 5000 },
+        resource,
+        routerStoreContext: baseRouterStoreContext,
+      });
+
+      jest.advanceTimersByTime(10);
+
+      const result = await slice.promise;
+      expect(result).toBe('fast-data');
+      expect(clearTimeoutSpy).toHaveBeenCalled();
+    });
+
+    it('should resolve with data when getData resolves immediately before timeout', async () => {
+      const resource = {
+        ...baseResource,
+        getData: jest.fn(() => Promise.resolve('immediate-data')),
+      };
+
+      const slice = createLoadingSlice({
+        context: baseContext,
+        dependencies: baseDependencies,
+        options: { timeout: 5000 },
+        resource,
+        routerStoreContext: baseRouterStoreContext,
+      });
+
+      const result = await slice.promise;
+      expect(result).toBe('immediate-data');
+    });
+
+    it('should resolve with data when sync getData returns under a timeout', async () => {
+      const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
+      const resource = {
+        ...baseResource,
+        getData: jest.fn(() => 'sync-value'),
+      };
+
+      const slice = createLoadingSlice({
+        context: baseContext,
+        dependencies: baseDependencies,
+        options: { timeout: 1000 },
+        resource,
+        routerStoreContext: baseRouterStoreContext,
+      });
+
+      const result = await slice.promise;
+      expect(result).toBe('sync-value');
+      expect(clearTimeoutSpy).toHaveBeenCalled();
+    });
+
+    it('should not set data synchronously when async getData is used with timeout', () => {
       const resource = {
         ...baseResource,
         getData: jest.fn(
@@ -296,27 +407,7 @@ describe('createLoadingSlice', () => {
         routerStoreContext: baseRouterStoreContext,
       });
 
-      jest.advanceTimersByTime(50);
-
-      await expect(slice.promise).rejects.toThrow(TimeoutError);
-    });
-
-    it('should resolve normally when getData completes before timeout', async () => {
-      const resource = {
-        ...baseResource,
-        getData: jest.fn(() => Promise.resolve('fast-data')),
-      };
-
-      const slice = createLoadingSlice({
-        context: baseContext,
-        dependencies: baseDependencies,
-        options: { timeout: 5000 },
-        resource,
-        routerStoreContext: baseRouterStoreContext,
-      });
-
-      const result = await slice.promise;
-      expect(result).toBe('fast-data');
+      expect(slice.data).toBeUndefined();
     });
   });
 });
